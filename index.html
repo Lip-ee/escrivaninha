@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#F4EDDD">
+<title>Escrivaninha</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23F4EDDD'/%3E%3Cpath d='M10 22.5 L20.5 9.5 L23 11.5 L12.5 24.5 L9.5 25.2 Z' fill='%238A6A46'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ Conectar ============ -->
+<div id="tela-conectar" class="tela-conectar" hidden>
+  <div class="conectar-caixa">
+    <h1>Escrivaninha</h1>
+    <p class="conectar-lede">O livro fica num repositório privado seu no GitHub. Esta página não guarda nada: ela só lê e salva lá, com um token que você cria uma vez.</p>
+
+    <ol class="passos">
+      <li>Abra <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>.</li>
+      <li><i>Token name:</i> Escrivaninha. <i>Expiration:</i> a que preferir.</li>
+      <li><i>Repository access:</i> Only select repositories, e escolha o repositório do livro.</li>
+      <li><i>Permissions → Repository permissions → Contents:</i> Read and write.</li>
+      <li><i>Generate token</i>, copie e cole abaixo.</li>
+    </ol>
+
+    <form id="form-conectar" class="form-conectar" autocomplete="off">
+      <label for="in-repo">Repositório <span>dono/nome</span></label>
+      <input id="in-repo" name="repo" type="text" placeholder="usuario/repositorio" required spellcheck="false" autocapitalize="off">
+      <label for="in-token">Token</label>
+      <input id="in-token" name="token" type="password" placeholder="github_pat_…" required spellcheck="false" autocapitalize="off">
+      <label for="in-branch">Branch <span>quase sempre main</span></label>
+      <input id="in-branch" name="branch" type="text" value="main" required spellcheck="false" autocapitalize="off">
+      <p id="conectar-erro" class="erro" role="alert" hidden></p>
+      <button type="submit" class="btn" id="btn-conectar">Conectar</button>
+    </form>
+    <p class="nota-seguranca">O token fica salvo só neste navegador. Em computador compartilhado, use Ajustes → Esquecer este computador quando terminar.</p>
+  </div>
+</div>
+
+<!-- ============ Carregando ============ -->
+<div id="tela-carregando" class="tela-carregando" hidden>
+  <p id="carregando-txt">Abrindo…</p>
+</div>
+
+<!-- ============ App ============ -->
+<div id="tela-app" class="app" hidden>
+  <header class="barra">
+    <button type="button" id="btn-caps" class="btn-icone" aria-label="Capítulos (Ctrl+K)" title="Capítulos (Ctrl+K)">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M4 10h12M4 14h8"/></svg>
+    </button>
+    <div class="barra-titulo" id="barra-titulo"></div>
+    <button type="button" id="btn-painel" class="btn-icone" aria-pressed="true" aria-controls="painel" aria-label="Mostrar ou esconder o roteiro (Ctrl+.)" title="Roteiro (Ctrl+.)">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="4" width="13" height="12" rx="1.5"/><path d="M11.5 4v12"/></svg>
+    </button>
+    <button type="button" id="btn-config" class="btn-icone" aria-label="Ajustes" title="Ajustes">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15" cy="10" r="1.2"/></svg>
+    </button>
+  </header>
+
+  <main class="mesa">
+    <section class="folha" id="folha" aria-label="Texto do capítulo">
+      <div class="folha-inner">
+        <div class="cab">
+          <p class="sobre" id="f-eyebrow"></p>
+          <h1 id="f-titulo"></h1>
+        </div>
+        <details id="anterior" class="anterior" hidden>
+          <summary>como terminou o capítulo anterior</summary>
+          <div id="anterior-txt" class="anterior-txt"></div>
+        </details>
+        <textarea id="texto" spellcheck="true" lang="pt-BR" placeholder="Comece a escrever…" aria-label="Texto do capítulo"></textarea>
+      </div>
+      <footer class="rodape-folha">
+        <button type="button" id="btn-ant" class="btn-icone" aria-label="Capítulo anterior (Alt+←)" title="Capítulo anterior (Alt+←)">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 5l-5 5 5 5"/></svg>
+        </button>
+        <span id="contagem" class="contagem"></span>
+        <button type="button" id="btn-sync" class="sync" data-estado="ok" title="Salvar agora (Ctrl+S)"><span id="sync-txt">salvo</span></button>
+        <button type="button" id="btn-prox" class="btn-icone" aria-label="Próximo capítulo (Alt+→)" title="Próximo capítulo (Alt+→)">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5l5 5-5 5"/></svg>
+        </button>
+      </footer>
+    </section>
+
+    <aside class="painel" id="painel" aria-label="Roteiro e apoio">
+      <div class="abas" role="tablist" aria-label="Apoio">
+        <button type="button" role="tab" id="tab-roteiro" aria-controls="aba-roteiro" aria-selected="true">Roteiro</button>
+        <button type="button" role="tab" id="tab-fios" aria-controls="aba-fios" aria-selected="false">Fios</button>
+        <button type="button" role="tab" id="tab-biblia" aria-controls="aba-biblia" aria-selected="false">Bíblia</button>
+        <button type="button" role="tab" id="tab-notas" aria-controls="aba-notas" aria-selected="false">Notas</button>
+        <span class="abas-espaco"></span>
+        <button type="button" role="tab" id="tab-buscar" class="aba-icone" aria-controls="aba-buscar" aria-selected="false" aria-label="Buscar no livro" title="Buscar no livro">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="4.5"/><path d="M12 12l4 4"/></svg>
+        </button>
+        <button type="button" role="tab" id="tab-historico" class="aba-icone" aria-controls="aba-historico" aria-selected="false" aria-label="Versões deste capítulo" title="Versões deste capítulo">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="M10 6.5V10l2.5 1.5"/></svg>
+        </button>
+        <button type="button" id="btn-fechar-painel" class="btn-icone so-estreito" aria-label="Fechar">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 6l8 8M14 6l-8 8"/></svg>
+        </button>
+      </div>
+      <div class="aba-corpo" id="aba-roteiro" role="tabpanel" aria-labelledby="tab-roteiro"></div>
+      <div class="aba-corpo" id="aba-fios" role="tabpanel" aria-labelledby="tab-fios" hidden></div>
+      <div class="aba-corpo" id="aba-biblia" role="tabpanel" aria-labelledby="tab-biblia" hidden></div>
+      <div class="aba-corpo" id="aba-notas" role="tabpanel" aria-labelledby="tab-notas" hidden></div>
+      <div class="aba-corpo" id="aba-buscar" role="tabpanel" aria-labelledby="tab-buscar" hidden></div>
+      <div class="aba-corpo" id="aba-historico" role="tabpanel" aria-labelledby="tab-historico" hidden></div>
+    </aside>
+  </main>
+
+  <!-- gaveta de capítulos -->
+  <div id="gaveta-fundo" class="gaveta-fundo" hidden></div>
+  <nav id="gaveta" class="gaveta" aria-label="Capítulos" hidden>
+    <div class="gaveta-topo">
+      <label class="sr" for="in-ir">Ir para capítulo</label>
+      <input id="in-ir" type="search" placeholder="Ir para… número ou título" autocomplete="off">
+    </div>
+    <div id="lista-caps" class="lista-caps"></div>
+    <div class="gaveta-rodape" id="gaveta-rodape"></div>
+  </nav>
+</div>
+
+<!-- ============ Diálogos ============ -->
+<dialog id="dlg-config" class="dlg">
+  <form method="dialog" class="dlg-caixa" id="form-config">
+    <h2>Ajustes</h2>
+    <fieldset>
+      <legend>Escrita</legend>
+      <label class="linha"><input type="checkbox" id="cfg-travessao"> <span><kbd>--</kbd> vira travessão (—)</span></label>
+      <label class="linha"><input type="checkbox" id="cfg-aspas"> <span>Aspas curvas (“ ”)</span></label>
+      <label class="linha"><input type="checkbox" id="cfg-reticencias"> <span><kbd>...</kbd> vira reticências (…)</span></label>
+      <label class="campo" for="cfg-fonte">Tamanho do texto <output id="cfg-fonte-out"></output></label>
+      <input type="range" id="cfg-fonte" min="15" max="26" step="1">
+      <label class="campo" for="cfg-meta">Meta diária de palavras</label>
+      <input type="number" id="cfg-meta" min="0" step="50" inputmode="numeric">
+      <label class="campo" for="cfg-tema">Papel</label>
+      <select id="cfg-tema"><option value="polen">Pólen</option><option value="noite">Noite</option></select>
+    </fieldset>
+    <fieldset>
+      <legend>Livro</legend>
+      <div class="acoes-linha">
+        <button type="button" class="btn" id="btn-exportar-md">Baixar o livro (.md)</button>
+        <button type="button" class="btn" id="btn-exportar-txt">Baixar o livro (.txt)</button>
+        <a class="btn" id="lnk-mapa" target="_blank" rel="noopener" hidden>Mapa da linha temporal</a>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Conexão</legend>
+      <p class="cfg-conexao" id="cfg-conexao"></p>
+      <div class="acoes-linha">
+        <button type="button" class="btn" id="btn-trocar-token">Trocar token</button>
+        <button type="button" class="btn perigo" id="btn-esquecer">Esquecer este computador</button>
+      </div>
+    </fieldset>
+    <p class="atalhos"><kbd>Ctrl</kbd>+<kbd>S</kbd> salvar · <kbd>Ctrl</kbd>+<kbd>K</kbd> capítulos · <kbd>Ctrl</kbd>+<kbd>.</kbd> roteiro · <kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd> anterior/próximo</p>
+    <div class="dlg-acoes"><button class="btn" value="ok">Fechar</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-ver" class="dlg dlg-largo">
+  <div class="dlg-caixa">
+    <h2 id="ver-titulo"></h2>
+    <p id="ver-sub" class="ver-sub"></p>
+    <div id="ver-texto" class="ver-texto"></div>
+    <div class="dlg-acoes" id="ver-acoes"></div>
+  </div>
+</dialog>
+
+<div id="aviso" class="aviso" role="status" aria-live="polite" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
