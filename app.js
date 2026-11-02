@@ -451,7 +451,65 @@ function crescer() {
   texto.style.height = 'auto';
   texto.style.height = texto.scrollHeight + 'px';
   rolagem.scrollTop = topo;
+  desenharDivisorias();
 }
+
+/* Divisória de cena: uma linha só com "* * *" aparece como um ornamento no meio da página.
+ * No arquivo continua "* * *", que é o padrão de manuscrito e vira linha horizontal no Markdown. */
+const DIVISORIA = '* * *';
+const ehDivisoria = l => /^\s*\*\s*\*\s*\*\s*$/.test(l);
+const camadaDiv = document.createElement('div');
+camadaDiv.className = 'divisorias'; camadaDiv.setAttribute('aria-hidden', 'true');
+texto.after(camadaDiv);
+let medidor = null, quadroDiv = 0;
+function desenharDivisorias() {
+  cancelAnimationFrame(quadroDiv);
+  quadroDiv = requestAnimationFrame(() => {
+    const linhas = texto.value.split('\n');
+    if (texto.disabled || !linhas.some(ehDivisoria)) { camadaDiv.replaceChildren(); return; }
+    if (!medidor) { medidor = document.createElement('div'); medidor.setAttribute('aria-hidden', 'true'); document.body.appendChild(medidor); }
+    const cs = getComputedStyle(texto);
+    Object.assign(medidor.style, {
+      position: 'absolute', visibility: 'hidden', top: '0', left: '-99999px', width: texto.clientWidth + 'px',
+      font: cs.font, lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing, whiteSpace: 'pre-wrap', overflowWrap: 'break-word', padding: '0',
+    });
+    medidor.innerHTML = linhas.map(l => ehDivisoria(l) ? `<span class="m-div" style="display:inline-block;vertical-align:top">${esc(l)}</span>` : esc(l)).join('\n');
+    Object.assign(camadaDiv.style, { top: texto.offsetTop + 'px', left: texto.offsetLeft + 'px', width: texto.clientWidth + 'px' });
+    camadaDiv.replaceChildren(...[...medidor.querySelectorAll('.m-div')].map(s => {
+      const d = document.createElement('div');
+      d.className = 'divisoria'; d.style.top = s.offsetTop + 'px'; d.style.height = cs.lineHeight;
+      return d;
+    }));
+  });
+}
+new ResizeObserver(desenharDivisorias).observe(texto);
+
+/* "…" sozinho na linha + Enter vira divisória (Ctrl+Z desfaz). Backspace ou Delete encostado nela apaga a divisória inteira. */
+texto.addEventListener('keydown', e => {
+  if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+  const pos = texto.selectionStart, v = texto.value;
+  if (pos !== texto.selectionEnd) return;
+  const ini = v.lastIndexOf('\n', pos - 1) + 1;
+  let fim = v.indexOf('\n', pos); if (fim < 0) fim = v.length;
+  let de = -1, ate = -1, novo = '';
+  if (e.key === 'Enter' && !e.shiftKey && pos === fim && /^\s*(…|\.\.\.)\s*$/.test(v.slice(ini, fim))) {
+    de = ini; ate = fim; novo = DIVISORIA + '\n';
+  } else if (e.key === 'Backspace' && pos === ini && ini > 0) {
+    const iniAnt = v.lastIndexOf('\n', ini - 2) + 1;
+    if (ehDivisoria(v.slice(iniAnt, ini - 1))) { de = iniAnt; ate = ini; }
+  } else if (e.key === 'Delete' && pos === fim && fim < v.length) {
+    let fimProx = v.indexOf('\n', fim + 1); if (fimProx < 0) fimProx = v.length;
+    if (ehDivisoria(v.slice(fim + 1, fimProx))) { de = fim; ate = fimProx; }
+  }
+  if (de < 0) return;
+  e.preventDefault();
+  ajustando = true;
+  try {
+    texto.setSelectionRange(de, ate);
+    if (novo) inserir(novo);
+    else if (!document.execCommand('delete')) { texto.setRangeText('', de, ate, 'end'); texto.dispatchEvent(new Event('input')); }
+  } finally { ajustando = false; }
+});
 
 let espelho = null;
 function rolarAteCursor() {

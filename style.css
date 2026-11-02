@@ -93,6 +93,9 @@ body.sem-painel .painel{display:none}
 #texto{display:block; width:100%; min-height:55vh; border:0; outline:0; resize:none; overflow:hidden; background:transparent; color:var(--tinta); font-family:var(--serif); font-size:var(--fonte); line-height:1.85; padding:0; caret-color:var(--marca); font-variant-numeric:normal; hyphens:manual}
 #texto::placeholder{color:var(--apagado); font-style:italic}
 #texto:disabled{opacity:.4}
+.folha-inner > .divisorias{position:absolute; margin:0; max-width:none; height:0; pointer-events:none}
+.divisoria{position:absolute; left:0; right:0; display:flex; align-items:center; justify-content:center; background:var(--papel); color:var(--tinta-2); font-size:var(--fonte); letter-spacing:.9em; padding-left:.9em}
+.divisoria::before{content:"* * *"}
 
 .rodape-folha{display:flex; align-items:center; justify-content:center; gap:10px; padding:6px 12px; padding-bottom:calc(8px + env(safe-area-inset-bottom,0px)); transition:opacity .6s ease}
 .contagem{font-size:12.5px; color:var(--apagado); font-variant-numeric:lining-nums tabular-nums}
