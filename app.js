@@ -511,6 +511,39 @@ texto.addEventListener('keydown', e => {
   } finally { ajustando = false; }
 });
 
+/* Ctrl+B / Ctrl+I: marca a seleção como **negrito** ou *itálico* (Markdown). De novo no mesmo trecho, desmarca. */
+const corrida = (v, i, passo) => { let n = 0; while (v[i + n * passo] === '*') n++; return n; };
+texto.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.isComposing) return;
+  const k = e.key.toLowerCase();
+  if (k !== 'b' && k !== 'i') return;
+  e.preventDefault();
+  const v = texto.value, m = k === 'b' ? '**' : '*';
+  let a = texto.selectionStart, b = texto.selectionEnd;
+  // duplo clique às vezes leva o espaço junto; a marca fica colada na palavra
+  while (a < b && /\s/.test(v[a])) a++;
+  while (b > a && /\s/.test(v[b - 1])) b--;
+  // seleção que já inclui as marcas: olha por dentro delas
+  let ini = a, fim = b;
+  while (ini < fim && v[ini] === '*') ini++;
+  while (fim > ini && v[fim - 1] === '*') fim--;
+  if (ini === fim) { ini = a; fim = b; }
+  const antes = corrida(v, ini - 1, -1), depois = corrida(v, fim, 1);
+  const marcado = k === 'b' ? antes >= 2 && depois >= 2 : antes % 2 === 1 && depois % 2 === 1;
+  ajustando = true;
+  try {
+    if (marcado && ini < fim) {
+      texto.setSelectionRange(ini - m.length, fim + m.length);
+      inserir(v.slice(ini, fim));
+      texto.setSelectionRange(ini - m.length, fim - m.length);
+    } else {
+      texto.setSelectionRange(a, b);
+      inserir(m + v.slice(a, b) + m);
+      texto.setSelectionRange(a + m.length, b + m.length);
+    }
+  } finally { ajustando = false; }
+});
+
 let espelho = null;
 function rolarAteCursor() {
   if (!espelho) { espelho = document.createElement('div'); espelho.setAttribute('aria-hidden', 'true'); document.body.appendChild(espelho); }
@@ -1303,7 +1336,8 @@ async function exportar(formato) {
       out += `### Capítulo ${c.n}\n<!-- ${c.titulo} -->\n\n`;
       out += t ? t.split(/\n+/).map(p => p.trim()).filter(Boolean).join('\n\n') + '\n\n' : '_(ainda não escrito)_\n\n';
     } else {
-      out += `Capítulo ${c.n}\n\n${t || '(ainda não escrito)'}\n\n`;
+      const limpo = t.split('\n').map(l => ehDivisoria(l) ? l : l.replace(/\*\*(?=\S)(.+?)\*\*/g, '$1').replace(/\*(?=\S)(.+?)\*/g, '$1')).join('\n');
+      out += `Capítulo ${c.n}\n\n${limpo || '(ainda não escrito)'}\n\n`;
     }
   }
   const nome = (titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'livro') + `-${hoje()}.${formato}`;
