@@ -58,7 +58,7 @@ const S = {
   prog: { doc: null, sha: null, dirty: false },
   atual: null, aba: 'roteiro',
   online: true, erro: null, conflito: false, enviando: 0, enviandoProg: false, ultimoSalvo: null,
-  filas: {}, timers: {}, primeiroSujo: {}, palavrasAoAbrir: {},
+  filas: {}, timers: {}, primeiroSujo: {}, palavrasAoAbrir: {}, tentativas: {},
   local: false,
 };
 
@@ -111,12 +111,15 @@ const API = {
       throw e;
     }
   },
-  async gravar(caminho, texto, sha, mensagem) {
-    const j = await this.req(`contents/${encodeURI(caminho)}`, {
+  fila: Promise.resolve(),
+  gravar(caminho, texto, sha, mensagem) {
+    // O GitHub recusa (409) dois commits ao mesmo tempo no mesmo branch: grava um de cada vez.
+    const p = this.fila.then(() => this.req(`contents/${encodeURI(caminho)}`, {
       method: 'PUT',
       body: { message: mensagem, content: b64enc(texto), branch: S.cfg.branch, ...(sha ? { sha } : {}) },
-    });
-    return j.content.sha;
+    })).then(j => j.content.sha);
+    this.fila = p.catch(() => {});
+    return p;
   },
   async historico(caminho) {
     return this.req('commits', { query: { path: caminho, sha: S.cfg.branch, per_page: 40 } });
@@ -585,16 +588,23 @@ async function enviarCap(n) {
   S.enviando++; atualizarSync();
   try {
     const sha = await API.gravar(caminhoCap(n), conteudo, base, `Cap. ${n}: ${c.titulo} (${contarPalavras(conteudo)} palavras)`);
-    t.sha = sha; S.arquivos[n] = sha;
+    t.sha = sha; S.arquivos[n] = sha; delete S.tentativas[n];
     if (t.texto === conteudo) { t.dirty = false; delete S.primeiroSujo[n]; }
     guardarLocal(n);
     S.online = true; S.erro = null; S.ultimoSalvo = new Date();
   } catch (e) {
     if (e.status === 409 || e.status === 422) {
       const rem = await API.ler(caminhoCap(n)).catch(() => null);
-      S.enviando--; atualizarSync();
-      await resolverConflito(n, rem);
-      S.enviando++;
+      S.tentativas[n] = (S.tentativas[n] || 0) + 1;
+      if (rem && rem.sha === base && S.tentativas[n] <= 3) {
+        // O arquivo no GitHub é o mesmo de antes: o branch só estava ocupado. Tenta de novo, sem perguntar nada.
+        setTimeout(() => enfileirar(n), 3e3);
+      } else {
+        delete S.tentativas[n];
+        S.enviando--; atualizarSync();
+        await resolverConflito(n, rem);
+        S.enviando++;
+      }
     } else if (e.offline) {
       S.online = false;
     } else {
