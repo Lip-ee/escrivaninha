@@ -58,7 +58,7 @@ const S = {
   prog: { doc: null, sha: null, dirty: false },
   atual: null, aba: 'roteiro',
   online: true, erro: null, conflito: false, enviando: 0, enviandoProg: false, ultimoSalvo: null,
-  filas: {}, timers: {}, primeiroSujo: {}, palavrasAoAbrir: {}, tentativas: {},
+  filas: {}, timers: {}, palavrasAoAbrir: {},
   local: false,
 };
 
@@ -111,18 +111,15 @@ const API = {
       throw e;
     }
   },
-  fila: Promise.resolve(),
-  gravar(caminho, texto, sha, mensagem) {
-    // O GitHub recusa (409) dois commits ao mesmo tempo no mesmo branch: grava um de cada vez.
-    const p = this.fila.then(() => this.req(`contents/${encodeURI(caminho)}`, {
+  async gravar(caminho, texto, sha, mensagem) {
+    const j = await this.req(`contents/${encodeURI(caminho)}`, {
       method: 'PUT',
       body: { message: mensagem, content: b64enc(texto), branch: S.cfg.branch, ...(sha ? { sha } : {}) },
-    })).then(j => j.content.sha);
-    this.fila = p.catch(() => {});
-    return p;
+    });
+    return j.content.sha;
   },
   async historico(caminho) {
-    return this.req('commits', { query: { path: caminho, sha: S.cfg.branch, per_page: 40 } });
+    return this.req('commits', { query: { path: caminho, sha: S.cfg.branch, per_page: 100 } });
   },
   async testar() {
     const d = await this.ler(CAMINHO_DADOS);
@@ -451,98 +448,7 @@ function crescer() {
   texto.style.height = 'auto';
   texto.style.height = texto.scrollHeight + 'px';
   rolagem.scrollTop = topo;
-  desenharDivisorias();
 }
-
-/* Divisória de cena: uma linha só com "* * *" aparece como um ornamento no meio da página.
- * No arquivo continua "* * *", que é o padrão de manuscrito e vira linha horizontal no Markdown. */
-const DIVISORIA = '* * *';
-const ehDivisoria = l => /^\s*\*\s*\*\s*\*\s*$/.test(l);
-const camadaDiv = document.createElement('div');
-camadaDiv.className = 'divisorias'; camadaDiv.setAttribute('aria-hidden', 'true');
-texto.after(camadaDiv);
-let medidor = null, quadroDiv = 0;
-function desenharDivisorias() {
-  cancelAnimationFrame(quadroDiv);
-  quadroDiv = requestAnimationFrame(() => {
-    const linhas = texto.value.split('\n');
-    if (texto.disabled || !linhas.some(ehDivisoria)) { camadaDiv.replaceChildren(); return; }
-    if (!medidor) { medidor = document.createElement('div'); medidor.setAttribute('aria-hidden', 'true'); document.body.appendChild(medidor); }
-    const cs = getComputedStyle(texto);
-    Object.assign(medidor.style, {
-      position: 'absolute', visibility: 'hidden', top: '0', left: '-99999px', width: texto.clientWidth + 'px',
-      font: cs.font, lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing, whiteSpace: 'pre-wrap', overflowWrap: 'break-word', padding: '0',
-    });
-    medidor.innerHTML = linhas.map(l => ehDivisoria(l) ? `<span class="m-div" style="display:inline-block;vertical-align:top">${esc(l)}</span>` : esc(l)).join('\n');
-    Object.assign(camadaDiv.style, { top: texto.offsetTop + 'px', left: texto.offsetLeft + 'px', width: texto.clientWidth + 'px' });
-    camadaDiv.replaceChildren(...[...medidor.querySelectorAll('.m-div')].map(s => {
-      const d = document.createElement('div');
-      d.className = 'divisoria'; d.style.top = s.offsetTop + 'px'; d.style.height = cs.lineHeight;
-      return d;
-    }));
-  });
-}
-new ResizeObserver(desenharDivisorias).observe(texto);
-
-/* "…" sozinho na linha + Enter vira divisória (Ctrl+Z desfaz). Backspace ou Delete encostado nela apaga a divisória inteira. */
-texto.addEventListener('keydown', e => {
-  if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
-  const pos = texto.selectionStart, v = texto.value;
-  if (pos !== texto.selectionEnd) return;
-  const ini = v.lastIndexOf('\n', pos - 1) + 1;
-  let fim = v.indexOf('\n', pos); if (fim < 0) fim = v.length;
-  let de = -1, ate = -1, novo = '';
-  if (e.key === 'Enter' && !e.shiftKey && pos === fim && /^\s*(…|\.\.\.)\s*$/.test(v.slice(ini, fim))) {
-    de = ini; ate = fim; novo = DIVISORIA + '\n';
-  } else if (e.key === 'Backspace' && pos === ini && ini > 0) {
-    const iniAnt = v.lastIndexOf('\n', ini - 2) + 1;
-    if (ehDivisoria(v.slice(iniAnt, ini - 1))) { de = iniAnt; ate = ini; }
-  } else if (e.key === 'Delete' && pos === fim && fim < v.length) {
-    let fimProx = v.indexOf('\n', fim + 1); if (fimProx < 0) fimProx = v.length;
-    if (ehDivisoria(v.slice(fim + 1, fimProx))) { de = fim; ate = fimProx; }
-  }
-  if (de < 0) return;
-  e.preventDefault();
-  ajustando = true;
-  try {
-    texto.setSelectionRange(de, ate);
-    if (novo) inserir(novo);
-    else if (!document.execCommand('delete')) { texto.setRangeText('', de, ate, 'end'); texto.dispatchEvent(new Event('input')); }
-  } finally { ajustando = false; }
-});
-
-/* Ctrl+B / Ctrl+I: marca a seleção como **negrito** ou *itálico* (Markdown). De novo no mesmo trecho, desmarca. */
-const corrida = (v, i, passo) => { let n = 0; while (v[i + n * passo] === '*') n++; return n; };
-texto.addEventListener('keydown', e => {
-  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.isComposing) return;
-  const k = e.key.toLowerCase();
-  if (k !== 'b' && k !== 'i') return;
-  e.preventDefault();
-  const v = texto.value, m = k === 'b' ? '**' : '*';
-  let a = texto.selectionStart, b = texto.selectionEnd;
-  // duplo clique às vezes leva o espaço junto; a marca fica colada na palavra
-  while (a < b && /\s/.test(v[a])) a++;
-  while (b > a && /\s/.test(v[b - 1])) b--;
-  // seleção que já inclui as marcas: olha por dentro delas
-  let ini = a, fim = b;
-  while (ini < fim && v[ini] === '*') ini++;
-  while (fim > ini && v[fim - 1] === '*') fim--;
-  if (ini === fim) { ini = a; fim = b; }
-  const antes = corrida(v, ini - 1, -1), depois = corrida(v, fim, 1);
-  const marcado = k === 'b' ? antes >= 2 && depois >= 2 : antes % 2 === 1 && depois % 2 === 1;
-  ajustando = true;
-  try {
-    if (marcado && ini < fim) {
-      texto.setSelectionRange(ini - m.length, fim + m.length);
-      inserir(v.slice(ini, fim));
-      texto.setSelectionRange(ini - m.length, fim - m.length);
-    } else {
-      texto.setSelectionRange(a, b);
-      inserir(m + v.slice(a, b) + m);
-      texto.setSelectionRange(a + m.length, b + m.length);
-    }
-  } finally { ajustando = false; }
-});
 
 let espelho = null;
 function rolarAteCursor() {
@@ -657,16 +563,18 @@ function renderStatus() {
 /* ============================== salvar ============================== */
 function pendente() { return Object.values(S.textos).some(t => t.dirty) || S.prog.dirty; }
 
+/* O texto é salvo neste computador a cada pausa. Para o GitHub ele vai no máximo
+ * a cada INTERVALO_ENVIO, e na hora com Ctrl+S, ao trocar de capítulo ou ao sair da janela. */
+const INTERVALO_ENVIO = 3 * 60e3;
+
 function agendarEnvio(n, imediato = false) {
-  clearTimeout(S.timers['cap' + n]);
-  S.primeiroSujo[n] ||= Date.now();
-  const longo = Date.now() - S.primeiroSujo[n] > 4 * 60e3;
-  S.timers['cap' + n] = setTimeout(() => enfileirar(n), imediato || longo ? 0 : 30e3);
+  if (imediato) { enfileirar(n); return; }
+  if (!S.timers['cap' + n]) S.timers['cap' + n] = setTimeout(() => { S.timers['cap' + n] = null; enfileirar(n); }, INTERVALO_ENVIO);
   atualizarSync();
 }
 
 function enfileirar(n) {
-  clearTimeout(S.timers['cap' + n]);
+  clearTimeout(S.timers['cap' + n]); S.timers['cap' + n] = null;
   S.filas[n] = (S.filas[n] || Promise.resolve()).then(() => enviarCap(n)).catch(() => {});
   return S.filas[n];
 }
@@ -679,23 +587,17 @@ async function enviarCap(n) {
   S.enviando++; atualizarSync();
   try {
     const sha = await API.gravar(caminhoCap(n), conteudo, base, `Cap. ${n}: ${c.titulo} (${contarPalavras(conteudo)} palavras)`);
-    t.sha = sha; S.arquivos[n] = sha; delete S.tentativas[n];
-    if (t.texto === conteudo) { t.dirty = false; delete S.primeiroSujo[n]; }
+    t.sha = sha; S.arquivos[n] = sha;
+    if (t.texto === conteudo) t.dirty = false;
     guardarLocal(n);
     S.online = true; S.erro = null; S.ultimoSalvo = new Date();
+    if (S.prog.dirty) enviarProg();
   } catch (e) {
     if (e.status === 409 || e.status === 422) {
       const rem = await API.ler(caminhoCap(n)).catch(() => null);
-      S.tentativas[n] = (S.tentativas[n] || 0) + 1;
-      if (rem && rem.sha === base && S.tentativas[n] <= 3) {
-        // O arquivo no GitHub é o mesmo de antes: o branch só estava ocupado. Tenta de novo, sem perguntar nada.
-        setTimeout(() => enfileirar(n), 3e3);
-      } else {
-        delete S.tentativas[n];
-        S.enviando--; atualizarSync();
-        await resolverConflito(n, rem);
-        S.enviando++;
-      }
+      S.enviando--; atualizarSync();
+      await resolverConflito(n, rem);
+      S.enviando++;
     } else if (e.offline) {
       S.online = false;
     } else {
@@ -703,13 +605,13 @@ async function enviarCap(n) {
     }
   } finally {
     S.enviando--; atualizarSync();
+    if (S.textos[n]?.dirty && !S.conflito && S.online && !S.erro) agendarEnvio(n);
     if (!$('#gaveta').hidden) renderLista();
   }
 }
 
 function agendarProg() {
-  clearTimeout(S.timers.prog);
-  S.timers.prog = setTimeout(enviarProg, 15e3);
+  if (!S.timers.prog) S.timers.prog = setTimeout(() => { S.timers.prog = null; enviarProg(); }, INTERVALO_ENVIO);
 }
 function mexerProg(n) {
   if (n != null) capProg(n).atualizado = Date.now();
@@ -721,7 +623,7 @@ function mexerProg(n) {
 
 async function enviarProg() {
   if (!S.prog.dirty || S.enviandoProg) return;
-  clearTimeout(S.timers.prog);
+  clearTimeout(S.timers.prog); S.timers.prog = null;
   S.enviandoProg = true; S.enviando++; atualizarSync();
   try {
     for (let tentativa = 0; tentativa < 4; tentativa++) {
@@ -768,7 +670,7 @@ function atualizarSync() {
   else if (S.enviando > 0) { estado = 'salvando'; rotulo = 'salvando…'; dica = 'Enviando para o GitHub.'; }
   else if (S.erro) { estado = 'erro'; rotulo = 'erro ao salvar'; dica = S.erro + ' Clique para tentar de novo.'; }
   else if (pendente() && !S.online) { estado = 'offline'; rotulo = 'sem internet · salvo aqui'; dica = 'Sobe para o GitHub quando a internet voltar.'; }
-  else if (pendente()) { estado = 'pendente'; rotulo = 'salvo aqui'; dica = 'Salvo neste computador. Sobe para o GitHub em alguns segundos (Ctrl+S envia agora).'; }
+  else if (pendente()) { estado = 'pendente'; rotulo = 'salvo aqui'; dica = 'Salvo neste computador. Vai para o GitHub em até 3 minutos, ao trocar de capítulo ou ao sair da janela (Ctrl+S envia agora).'; }
   else { estado = 'ok'; rotulo = 'salvo'; dica = S.ultimoSalvo ? 'No GitHub desde as ' + hora(S.ultimoSalvo) + '.' : 'Tudo no GitHub.'; }
   if (S.local && estado === 'ok') dica = 'Modo local: salvo só neste navegador.';
   b.dataset.estado = estado; txt.textContent = rotulo; b.title = dica;
@@ -776,7 +678,7 @@ function atualizarSync() {
 $('#btn-sync').addEventListener('click', () => salvarAgora());
 
 window.addEventListener('online', () => { S.online = true; enviarTudo(); });
-setInterval(() => { if (pendente() && !S.conflito) enviarTudo(); }, 60e3);
+setInterval(() => { if (pendente() && !S.conflito && (!S.online || S.erro)) { S.erro = null; enviarTudo(); } }, 60e3);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && S.atual && S.textos[S.atual] && !S.esquecendo) {
     guardarLocal(S.atual); guardarPos();
@@ -1336,8 +1238,7 @@ async function exportar(formato) {
       out += `### Capítulo ${c.n}\n<!-- ${c.titulo} -->\n\n`;
       out += t ? t.split(/\n+/).map(p => p.trim()).filter(Boolean).join('\n\n') + '\n\n' : '_(ainda não escrito)_\n\n';
     } else {
-      const limpo = t.split('\n').map(l => ehDivisoria(l) ? l : l.replace(/\*\*(?=\S)(.+?)\*\*/g, '$1').replace(/\*(?=\S)(.+?)\*/g, '$1')).join('\n');
-      out += `Capítulo ${c.n}\n\n${limpo || '(ainda não escrito)'}\n\n`;
+      out += `Capítulo ${c.n}\n\n${t || '(ainda não escrito)'}\n\n`;
     }
   }
   const nome = (titulo.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'livro') + `-${hoje()}.${formato}`;
