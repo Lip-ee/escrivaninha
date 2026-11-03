@@ -643,10 +643,21 @@ function sequencia() {
   return n;
 }
 
+/* Páginas estimadas no formato do livro impresso. O formato vem de dados/capitulos.json
+ * (campo "formato"); sem ele, o app não mostra páginas. */
+function paginasPorPalavras(w) {
+  const f = S.dados?.formato;
+  if (!f || !w) return 0;
+  return Math.ceil((w / f.palavrasPorLinha + f.linhasAbertura) / f.linhasPorPagina);
+}
+function paginasLivro() { return S.caps.reduce((s, c) => s + paginasPorPalavras(palavrasDe(c.n)), 0); }
+
 function renderContagem() {
   if (!S.atual || !S.textos[S.atual]) { $('#contagem').textContent = ''; return; }
   const w = contarPalavras(S.textos[S.atual].texto);
-  $('#contagem').textContent = `${fmtN(w)} ${w === 1 ? 'palavra' : 'palavras'}`;
+  const p = paginasPorPalavras(w);
+  $('#contagem').textContent = `${fmtN(w)} ${w === 1 ? 'palavra' : 'palavras'}` + (p ? ` · ≈ ${p} ${p === 1 ? 'página' : 'páginas'}` : '');
+  $('#contagem').title = p ? `Estimativa no formato do livro impresso (${S.dados.formato.descricao || ''})` : '';
 }
 
 function renderStatus() {
@@ -1212,7 +1223,8 @@ function renderLista() {
   const comecados = S.caps.filter(c => statusDe(c.n) !== 'vazio').length;
   const meta = S.prog.doc.config.metaDiaria || 0, dia = palavrasDoDia(hoje()), seq = sequencia();
   $('#gaveta-rodape').innerHTML = `
-    <div><b>${fmtN(total)}</b> palavras no livro · <b>${comecados}</b> começados · <b>${prontos}</b>/${S.caps.length} prontos</div>
+    <div><b>${fmtN(total)}</b> palavras${S.dados.formato ? ` · ≈ <b>${fmtN(paginasLivro())}</b> páginas de livro` : ''}</div>
+    <div><b>${comecados}</b> começados · <b>${prontos}</b>/${S.caps.length} prontos</div>
     <div>Hoje: <b>${fmtN(dia)}</b>${meta ? ` de ${fmtN(meta)} palavras` : ' palavras'}</div>
     ${seq > 1 ? `<div>${seq} dias seguidos escrevendo</div>` : ''}
     <div class="legenda"><span><span class="st"></span>não começado</span><span><span class="st st-rascunho"></span>rascunho</span><span><span class="st st-revisar"></span>revisar</span><span><span class="st st-pronto"></span>pronto</span></div>`;
